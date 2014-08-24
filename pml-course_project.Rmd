@@ -126,7 +126,7 @@ ct2 <- table(pred2,validation$classe)
 confusionMatrix(ct2)
 ```
 
-As we see, this model shows **good performances on the validation set**. It will gives us better performances on the test set.
+As we see, this model shows **good performances on the validation set**. It will gives us better performances on the test set than the classification tree model.
 
 ## 4. Results
 We **apply** the two models **on the test set**. According to our results on the training and validation sets, the random forest should give us the best predictions.
