@@ -1,0 +1,146 @@
+---
+title: "PML - Course Project"
+author: "Fabrice LEBEL"
+date: "20/08/2014"
+output: html_document
+---
+
+## 1. Introduction
+The purpose of this study is to use data from fitness devices and use them to predict if a user performes correctly or not barbell lifts. Our approach is to
+
+1. Perform exploratory analysis and data cleanup on the training set
+2. Study 2 classification models on the training set based on the following algorithms
+ + classification tree
+ + random forest
+3. Apply the trained models to a test set.
+
+## 2. Exploratory Analysis and Data Cleaning
+```{r, echo=FALSE}
+cleanPredictors <- function(data){
+  ret <- data
+  preds <- colnames(data)
+  predToKeep <- c()
+  predToRemove <- c()
+  for(i in 1:ncol(data)) {
+    freq <- (sum(is.na(data[,i])) / nrow(data)) * 100
+    if(freq == 0) {
+      predToKeep <- c(predToKeep, preds[i])
+    }
+    else {
+      predToRemove <- c(predToRemove, preds[i])
+    }
+  }
+  ret <- subset(ret, select = predToKeep)
+  list(df = ret, kept = predToKeep, removed = predToRemove)
+}
+```
+
+```{r, echo=FALSE,message=FALSE}
+setwd("~/Coursera/2014 - Data Science Specialization/8 - Practical Machine Learning/Course Project")
+set.seed(123)
+library(caret)
+data.train <- read.csv("./data/pml-training.csv", na.strings=c("NA",""), stringsAsFactors=FALSE)
+#library(psych)
+#describe(data.train)
+
+# Remove NA predictors
+# ********************
+newData <- cleanPredictors(data.train)
+newData.train <- cleanPredictors(data.train)$df
+
+# Check correlation between numerical predictors
+# **********************************************
+predToRemove <- c("X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp","new_window","num_window","classe")
+tmp <- newData.train[, -which(names(newData.train) %in% predToRemove)]
+descrCor <-cor(tmp)
+#summary(descrCor)
+
+# Remove predictors with the largest mean absolute correlation
+# ************************************************************
+highlyCorDescr <- findCorrelation(descrCor, cutoff = 0.7)
+filteredDescr <- tmp[, -highlyCorDescr]
+descrCor2 <- cor(filteredDescr)
+#summary(descrCor2[upper.tri(descrCor2)])
+predToKeep <- colnames(descrCor2)
+finalData.train <- subset(data.train, select = c(predToKeep, "classe"))
+finalData.train$classe <- as.factor(finalData.train$classe)
+#str(finalData.train)
+# Split training data in test and validation sets
+inTrain <- createDataPartition(y=finalData.train$classe, p=0.6, list=FALSE)
+training <- finalData.train[inTrain,]
+validation <- finalData.train[-inTrain,]
+
+data.test <- read.csv("./data/pml-testing.csv", na.strings=c("NA",""), stringsAsFactors=FALSE)
+testing <- data.test[, which(names(data.test) %in% names(finalData.train))]
+```
+The data set is divided in 2 separate sets: a training set and a test set. The data cleanup and feature selection process used the following steps:
+
+1. By examining the training set with the **describe** function from the **psych** package we can see that several **predictors contain NAs and/or no data**. We remove these variables from the training set. We end up with **59 possible predictors** for the 'classe' outcome.
+2. We remove all the qualitative predictors.
+3. As we want predictors not correlated 2 by 2, we perform a correlation analysis between quantitative predictors using the **findCorrelation** function from the **caret** package with a cutoff value of 0.7. We remove predictors with the largest mean absolute correlation. **We end up with 30 predictors** which are the following
+```{r, echo=FALSE}
+predToKeep
+```
+4. We **split the training set in 2**: 60% for training, 40% for validation.
+
+## 3. Models
+
+### 3.1 Classification Tree
+Our first predictive model is a **classification tree**. We have the following tree:
+
+```{r, echo=FALSE,message=FALSE}
+modelFit1 <- train(classe ~ ., data=finalData.train, method="rpart")
+#print(modelFit1$finalModel)
+pred1 <- predict(modelFit1, newdata=validation)
+validation$predRight1 <- pred1 == validation$classe
+```
+```{r,echo=FALSE,message=FALSE}
+library(rattle)
+fancyRpartPlot(modelFit1$finalModel)
+```
+
+Hereafter are the confusion matrix performed on the **validation set** and its related statistics.
+```{r,echo=FALSE,message=FALSE}
+ct1 <-table(pred1,validation$classe)
+confusionMatrix(ct1)
+```
+
+As we can see, this model offers **poor performances** due to its high rate of misclassifications.
+
+### 3.2 Random Forest
+Our second predictive model is based on the **random forest** algorithm performed with the **randomForest** package.
+
+```{r,echo=FALSE,message=FALSE}
+library(randomForest)
+modelFit2 <- randomForest(classe~., data=training)
+#print(modelFit2)
+pred2 <- predict(modelFit2, newdata=validation)
+validation$predRight2 <- pred2 == validation$classe
+#imp <- as.data.frame(importance(modelFit2))
+#imp
+```
+
+Hereafter are the confusion matrix performed on the **validation set** and its related statistics.
+```{r,echo=FALSE,message=FALSE}
+ct2 <- table(pred2,validation$classe)
+confusionMatrix(ct2)
+```
+
+As we see, this model shows **good performances on the validation set**. It will gives us better performances on the test set.
+
+## 4. Results
+We **apply** the two models **on the test set**. According to our results on the training and validation sets, the random forest should give us the best predictions.
+
+1. **Classification Tree**
+```{r,echo=FALSE,message=FALSE}
+# Apply models on the testing set
+# *******************************
+predTest1 <- predict(modelFit1, newdata=testing)
+predTest1
+```
+
+2. **Random Forest**
+```{r,echo=FALSE,message=FALSE}
+predTest2 <- predict(modelFit2, newdata=testing)
+predTest2
+```
